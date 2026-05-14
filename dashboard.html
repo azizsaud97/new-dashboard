@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مرافق | نظام إدارة العدادات الجغرافي</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+:root {
+  --brand-blue: #004b79; --brand-orange: #f28e13;
+  --bg: #f4f7f6; --card: #ffffff; --border: #e2e8f0;
+  --text: #2d3748; --dim: #718096;
+  --green: #38a169; --red: #e53e3e; --yellow: #d69e2e; --purple: #805ad5;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Cairo',sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+/* TOPBAR */
+.topbar { background:var(--card); border-bottom:2px solid var(--brand-blue); padding:10px 20px; display:flex; align-items:center; gap:16px; z-index:1000; box-shadow:0 2px 10px rgba(0,0,0,0.05); flex-wrap:nowrap; }
+.logo { font-size:16px; font-weight:900; color:var(--brand-blue); line-height:1.2; flex-shrink:0; }
+.logo span { color:var(--brand-orange); font-weight:700; font-size:11px; display:block; margin-top:2px; }
+
+.search-wrap { display:flex; align-items:center; gap:6px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:6px 12px; min-width:220px; transition:.2s; }
+.search-wrap:focus-within { border-color:var(--brand-blue); box-shadow:0 0 0 2px rgba(0,75,121,.1); }
+.search-wrap input { background:none; border:none; outline:none; font-family:'Cairo',sans-serif; font-size:12px; width:100%; text-align:right; }
+
+.kpi-row { display:flex; gap:10px; flex:1; justify-content:center; }
+.kpi { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:6px 16px; text-align:center; min-width:100px; }
+.kpi-label { font-size:10px; color:var(--dim); font-weight:700; }
+.kpi-num { font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:700; color:var(--brand-blue); }
+.kpi-num.green  { color:var(--green); }
+.kpi-num.red    { color:var(--red); }
+.kpi-num.orange { color:var(--brand-orange); }
+
+.filter-radios { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+.frad { display:flex; align-items:center; gap:3px; cursor:pointer; }
+.frad input { display:none; }
+.frad-box { width:14px; height:14px; border-radius:50%; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; transition:.15s; background:#fff; }
+.frad input:checked ~ .frad-box { border-color:var(--brand-orange); background:var(--brand-orange); }
+.frad input:checked ~ .frad-box::after { content:''; width:5px; height:5px; background:#fff; border-radius:50%; }
+.frad-lbl { font-size:11px; font-weight:600; }
+
+.action-btns { display:flex; gap:8px; flex-shrink:0; }
+.btn { padding:7px 14px; border-radius:6px; font-family:'Cairo'; font-size:12px; font-weight:bold; cursor:pointer; border:none; transition:.2s; }
+.btn-export { background:var(--brand-blue); color:white; }
+.btn-export:hover { background:#003657; }
+.btn-reset { background:#fff; border:1px solid var(--border); color:var(--text); }
+.btn-reset:hover { background:var(--bg); border-color:var(--dim); }
+
+/* ERROR BANNER */
+.error-banner { background:#fed7d7; color:#742a2a; padding:10px 20px; text-align:center; font-weight:700; font-size:13px; }
+
+/* MAIN GRID */
+.body-grid { display:grid; grid-template-columns:280px 1fr 300px; flex:1; min-height:0; }
+
+/* LEFT PANEL */
+.left-panel { background:var(--card); border-left:1px solid var(--border); padding:15px; overflow-y:auto; display:flex; flex-direction:column; gap:20px; }
+.section-title { font-size:13px; color:var(--brand-blue); font-weight:900; border-bottom:2px solid var(--bg); padding-bottom:8px; margin-bottom:10px; }
+.sector-item { padding:10px; border:1px solid var(--border); border-radius:6px; margin-bottom:8px; cursor:pointer; transition:.2s; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.sector-item:hover, .sector-item.active { background:var(--bg); border-color:var(--brand-blue); }
+.sector-name { font-weight:700; font-size:11px; color:var(--brand-blue); line-height:1.4; }
+.sector-count { font-family:'IBM Plex Mono'; font-size:11px; background:var(--brand-orange); color:white; padding:2px 6px; border-radius:10px; flex-shrink:0; }
+
+.mini-status-table { width:100%; border-collapse:collapse; font-size:11px; }
+.mini-status-table td { padding:8px 5px; border-bottom:1px solid var(--bg); }
+.mini-status-table tr:last-child td { border-bottom:none; }
+.st-dot { display:inline-block; width:8px; height:8px; border-radius:2px; margin-left:6px; vertical-align:middle; }
+.st-count { font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:12px; }
+
+.back-hint { font-size:11px; color:var(--dim); text-align:center; padding:10px; background:var(--bg); border-radius:6px; }
+
+/* CENTER MAP */
+.map-area { position:relative; background:#e5e9ed; }
+#mainMap { width:100%; height:100%; z-index:1; }
+.loading-overlay { position:absolute; inset:0; background:rgba(244,247,246,0.95); display:flex; align-items:center; justify-content:center; z-index:500; flex-direction:column; gap:15px; }
+.spinner { width:40px; height:40px; border:4px solid var(--border); border-top-color:var(--brand-blue); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-overlay.hide { display:none; }
+
+/* RIGHT PANEL */
+.right-panel { background:var(--card); border-right:1px solid var(--border); padding:15px; overflow-y:auto; box-shadow:-5px 0 15px rgba(0,0,0,.03); z-index:2; }
+.empty-state { text-align:center; color:var(--dim); font-size:13px; margin-top:50px; line-height:1.8; }
+.detail-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:15px; margin-bottom:15px; }
+.d-row { display:flex; flex-direction:column; margin-bottom:12px; border-bottom:1px dashed #e2e8f0; padding-bottom:8px; }
+.d-row:last-child { border:none; margin-bottom:0; padding-bottom:0; }
+.d-label { font-size:10px; color:var(--dim); font-weight:700; text-transform:uppercase; margin-bottom:2px; }
+.d-val { font-size:13px; color:var(--brand-blue); font-weight:700; font-family:'IBM Plex Mono','Cairo'; word-break:break-word; }
+.status-badge { display:inline-block; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; color:white; }
+.close-btn { background:rgba(229,62,62,.1); color:var(--red); border:1px solid var(--red); padding:3px 8px; border-radius:4px; font-size:10px; font-family:'Cairo'; font-weight:bold; cursor:pointer; transition:.2s; }
+.close-btn:hover { background:var(--red); color:white; }
+
+/* MAP LABELS */
+.sector-label { background:rgba(255,255,255,.95); border:2px solid var(--brand-blue); border-radius:6px; padding:4px 8px; text-align:center; box-shadow:0 4px 10px rgba(0,75,121,.15); white-space:nowrap; line-height:1.3; cursor:pointer; transition:.15s; }
+.sector-label:hover { transform:translateY(-2px); box-shadow:0 6px 14px rgba(0,75,121,.25); }
+.sector-label-title { color:var(--brand-blue); font-weight:900; font-size:13px; }
+.sector-label-sub   { color:var(--brand-orange); font-weight:700; font-size:10px; }
+.dot-marker { border-radius:50%; border:2px solid #fff; box-shadow:0 0 5px rgba(0,0,0,.5); }
+
+@media (max-width:1100px) {
+  .body-grid { grid-template-columns:240px 1fr 280px; }
+  .kpi { min-width:80px; padding:6px 10px; }
+  .kpi-num { font-size:18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">مرافق<span>الذكاء الجغرافي للعدادات</span></div>
+
+  <div class="search-wrap">
+    <span style="color:var(--dim);font-size:12px;">🔍</span>
+    <input type="text" id="searchInput" placeholder="ابحث برقم الحساب أو الجوال...">
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">إجمالي العدادات</div><div class="kpi-num"        id="kpi-total">0</div></div>
+    <div class="kpi"><div class="kpi-label">نشط</div>            <div class="kpi-num green"  id="kpi-active">0</div></div>
+    <div class="kpi"><div class="kpi-label">مفصول</div>          <div class="kpi-num red"    id="kpi-disc">0</div></div>
+    <div class="kpi"><div class="kpi-label">مفصول مع صرف</div>   <div class="kpi-num orange" id="kpi-leak">0</div></div>
+  </div>
+
+  <div class="filter-radios">
+    <label class="frad"><input type="radio" name="ztype" value="all" checked><div class="frad-box"></div><span class="frad-lbl">الكل</span></label>
+    <label class="frad"><input type="radio" name="ztype" value="سكني"><div class="frad-box"></div><span class="frad-lbl" style="color:var(--brand-blue);">سكني</span></label>
+    <label class="frad"><input type="radio" name="ztype" value="تجاري"><div class="frad-box"></div><span class="frad-lbl" style="color:var(--brand-orange);">تجاري</span></label>
+    <label class="frad"><input type="radio" name="ztype" value="حكومي"><div class="frad-box"></div><span class="frad-lbl" style="color:var(--purple);">حكومي</span></label>
+    <label class="frad"><input type="radio" name="ztype" value="صناعي"><div class="frad-box"></div><span class="frad-lbl" style="color:var(--green);">صناعي</span></label>
+  </div>
+
+  <div class="action-btns">
+    <button class="btn btn-reset"  onclick="resetView()">↺ إعادة ضبط</button>
+    <button class="btn btn-export" onclick="exportData()">📥 Excel</button>
+  </div>
+</div>
+
+<div id="errorBanner" class="error-banner" style="display:none;"></div>
+
+<div class="body-grid">
+  <div class="left-panel">
+    <div>
+      <div class="section-title">الحي - المحلة</div>
+      <div id="sectorsList">
+        <div style="text-align:center; color:var(--dim); font-size:12px; padding:20px;">جاري التحميل...</div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">الحالة والعدد</div>
+      <table class="mini-status-table" id="statusListTable"></table>
+    </div>
+  </div>
+
+  <div class="map-area">
+    <div id="mainMap"></div>
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+      <div style="color:var(--dim);font-size:13px;">جاري تحميل البيانات...</div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+      معلومات المشترك
+      <button class="close-btn" id="closeDetailBtn" style="display:none;" onclick="resetView()">✖ إغلاق</button>
+    </div>
+    <div id="subscriberDetails">
+      <div class="empty-state">
+        <div style="font-size:40px; margin-bottom:10px;">📍</div>
+        اضغط على أي محلة في الخريطة<br>للتكبير وعرض العدادات
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Config ────────────────────────────────────────────────
+const API = "/api";   // Same-origin: served by Flask → no CORS needed.
+
+const STATUS_COLORS = {
+  "نشط"            : "#38a169",
+  "نشط غير موثق"   : "#d69e2e",
+  "مفصول"          : "#e53e3e",
+  "مفصول غير موثق" : "#805ad5",
+  "مفصول ويوجد صرف": "#f28e13"
+};
+
+const DISTRICT_ARABIC = {
+  'A':'جلمودة','B':'الفناتير','C':'الرقة','D':'الدفي',
+  'E':'مردومة','F':'المطرفية','G':'السروع','H':'الفصل',
+  'M':'الخليج','N':'الحويلات','P':'اللؤلؤ','Q':'البحر',
+  'R':'الشاطئ','S':'ينبع الصناعية','T':'مركز المدينة'
+};
+
+const SECTOR_ARABIC = {
+  'A1':'الرياض','A2':'طيبة','A3':'الطائف','A4':'العلا','A5':'ينبع',
+  'B1':'الحجاز','B2':'مكة','B3':'سدير','B4':'نجد','B5':'الأحساء','B6':'دارين',
+  'D1':'الأندلس','D2':'القدس','D3':'الفيحاء','D4':'الفاروق','D5':'الفردوس',
+  'F1':'الريحان','F2':'الخزامى','F3':'الياسمين','F4':'الربيع'
+};
+
+// ─── State ─────────────────────────────────────────────────
+let allData = [];
+let map = null;
+let markersLayer = null;
+let labelsLayer  = null;
+let currentSector   = 'all';
+let currentZoneType = 'all';
+
+// ─── Helpers ───────────────────────────────────────────────
+function showError(msg) {
+  const b = document.getElementById('errorBanner');
+  b.textContent = msg;
+  b.style.display = 'block';
+}
+function hideLoader() { document.getElementById('loadingOverlay').classList.add('hide'); }
+
+function nameOfDistrict(code) { return DISTRICT_ARABIC[code] || code || '?'; }
+function nameOfSector(code)   { return SECTOR_ARABIC[code] || ''; }
+
+// ─── Init ──────────────────────────────────────────────────
+function initMap() {
+  map = L.map('mainMap', { zoomControl: true }).setView([27.14, 49.54], 12);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap & CARTO',
+    maxZoom: 19,
+    subdomains: 'abcd'
+  }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+  labelsLayer  = L.layerGroup().addTo(map);
+}
+
+function fitToData() {
+  const pts = allData
+    .filter(d => d.lat != null && d.lng != null)
+    .map(d => [d.lat, d.lng]);
+  if (pts.length) map.fitBounds(pts, { padding: [50, 50] });
+}
+
+async function fetchData() {
+  try {
+    const res = await fetch(`${API}/data`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    allData = await res.json();
+
+    if (!Array.isArray(allData) || allData.length === 0) {
+      hideLoader();
+      showError('⚠️ السيرفر يعمل لكن لا توجد بيانات. تحقق من ملف Excel.');
+      return;
+    }
+    initMap();
+    fitToData();
+    processMapData();
+    hideLoader();
+  } catch (err) {
+    hideLoader();
+    showError('❌ تعذر الاتصال بالسيرفر. شغّل: python server.py');
+    console.error(err);
+  }
+}
+
+// ─── Main render ───────────────────────────────────────────
+function processMapData() {
+  if (!map) return;
+  markersLayer.clearLayers();
+  labelsLayer.clearLayers();
+
+  const drilledIn = (currentSector !== 'all' || currentZoneType !== 'all');
+  const sectors = {};
+  let active = 0, disc = 0, leak = 0;
+  const stats = {
+    "نشط":0, "نشط غير موثق":0, "مفصول":0,
+    "مفصول غير موثق":0, "مفصول ويوجد صرف":0, "استهلاك صفري":0
+  };
+
+  const filtered = allData.filter(d => {
+    const ms = currentSector   === 'all' || d.sector    === currentSector;
+    const mz = currentZoneType === 'all' || d.zone_type === currentZoneType;
+    return ms && mz;
+  });
+
+  filtered.forEach(d => {
+    if (d.status && d.status.includes("نشط"))                       active++;
+    if (d.status === "مفصول" || d.status === "مفصول غير موثق")     disc++;
+    if (d.status === "مفصول ويوجد صرف")                             leak++;
+
+    if (stats[d.status] !== undefined) stats[d.status]++;
+    if (d.zero_consumption === "نعم") stats["استهلاك صفري"]++;
+
+    // accumulate per-sector centroid
+    if (!sectors[d.sector]) sectors[d.sector] = { count:0, district:d.district, latSum:0, lngSum:0, n:0 };
+    sectors[d.sector].count++;
+    if (d.lat != null && d.lng != null) {
+      sectors[d.sector].latSum += d.lat;
+      sectors[d.sector].lngSum += d.lng;
+      sectors[d.sector].n++;
+    }
+
+    // when drilled in, drop individual meter pins
+    if (drilledIn && d.lat != null && d.lng != null) {
+      const color = STATUS_COLORS[d.status] || "#718096";
+      const icon = L.divIcon({
+        html: `<div class="dot-marker" style="background:${color}; width:14px; height:14px;"></div>`,
+        className: '', iconSize:[14,14], iconAnchor:[7,7]
+      });
+      const m = L.marker([d.lat, d.lng], { icon }).addTo(markersLayer);
+      m.on('click', () => showSubscriberDetails(d, color));
+    }
+  });
+
+  // KPIs
+  document.getElementById('kpi-total' ).textContent = filtered.length.toLocaleString('ar-EG');
+  document.getElementById('kpi-active').textContent = active.toLocaleString('ar-EG');
+  document.getElementById('kpi-disc'  ).textContent = disc.toLocaleString('ar-EG');
+  document.getElementById('kpi-leak'  ).textContent = leak.toLocaleString('ar-EG');
+
+  // Status table
+  const rows = [
+    ["نشط",             stats["نشط"],             STATUS_COLORS["نشط"]],
+    ["نشط غير موثق",    stats["نشط غير موثق"],    STATUS_COLORS["نشط غير موثق"]],
+    ["مفصول",           stats["مفصول"],           STATUS_COLORS["مفصول"]],
+    ["مفصول غير موثق",  stats["مفصول غير موثق"],  STATUS_COLORS["مفصول غير موثق"]],
+    ["مفصول ويوجد صرف", stats["مفصول ويوجد صرف"], STATUS_COLORS["مفصول ويوجد صرف"]],
+    ["استهلاك صفري",    stats["استهلاك صفري"],    "#718096"]
+  ];
+  document.getElementById('statusListTable').innerHTML = rows.map(r => `
+    <tr>
+      <td><span class="st-dot" style="background:${r[2]}"></span>${r[0]}</td>
+      <td style="text-align:left;"><span class="st-count" style="color:${r[2]}">${r[1].toLocaleString('ar-EG')}</span></td>
+    </tr>`).join('');
+
+  // Sector labels + sidebar list
+  const listDiv = document.getElementById('sectorsList');
+
+  if (!drilledIn) {
+    listDiv.innerHTML = '';
+    const entries = Object.entries(sectors).sort((a,b) => a[0].localeCompare(b[0]));
+    if (!entries.length) {
+      listDiv.innerHTML = '<div style="color:var(--dim);font-size:12px;text-align:center;padding:20px;">لا توجد بيانات</div>';
+      return;
+    }
+    entries.forEach(([sec, info]) => {
+      if (info.n === 0) return;                                  // need at least one coord
+      const coords = [info.latSum / info.n, info.lngSum / info.n]; // ← dynamic centroid
+      const distAr = nameOfDistrict(info.district);
+      const secAr  = nameOfSector(sec);
+
+      // Map label
+      L.marker(coords, {
+        icon: L.divIcon({
+          html: `<div class="sector-label">
+                   <div class="sector-label-title">حي ${distAr}</div>
+                   <div class="sector-label-sub">${secAr ? secAr + ' ' : ''}(${sec})</div>
+                 </div>`,
+          className: '', iconSize:[110,42], iconAnchor:[55,21]
+        })
+      }).on('click', () => focusSector(sec, coords[0], coords[1])).addTo(labelsLayer);
+
+      // Sidebar item
+      const item = document.createElement('div');
+      item.className = 'sector-item';
+      item.innerHTML = `
+        <span class="sector-name">حي ${distAr}${secAr ? ' - ' + secAr : ''} (${sec})</span>
+        <span class="sector-count">${info.count}</span>`;
+      item.onclick = () => focusSector(sec, coords[0], coords[1]);
+      listDiv.appendChild(item);
+    });
+  } else {
+    // Drilled in — show current scope + a back hint
+    const lines = [];
+    if (currentSector !== 'all') {
+      const info = sectors[currentSector];
+      if (info) {
+        const distAr = nameOfDistrict(info.district);
+        const secAr  = nameOfSector(currentSector);
+        lines.push(`
+          <div class="sector-item active">
+            <span class="sector-name">حي ${distAr}${secAr ? ' - ' + secAr : ''} (${currentSector})</span>
+            <span class="sector-count">${info.count}</span>
+          </div>`);
+      }
+    }
+    if (currentZoneType !== 'all') {
+      lines.push(`
+        <div class="sector-item active">
+          <span class="sector-name">نوع: ${currentZoneType}</span>
+          <span class="sector-count">${filtered.length}</span>
+        </div>`);
+    }
+    lines.push('<div class="back-hint">اضغط ↺ إعادة ضبط للعودة</div>');
+    listDiv.innerHTML = lines.join('');
+  }
+}
+
+// ─── Interactions ──────────────────────────────────────────
+document.querySelectorAll('input[name="ztype"]').forEach(inp => {
+  inp.addEventListener('change', e => {
+    currentZoneType = e.target.value;
+    processMapData();
+  });
+});
+
+function focusSector(sec, lat, lng) {
+  currentSector = sec;
+  map.flyTo([lat, lng], 17, { animate:true, duration:1.2 });
+  processMapData();
+}
+
+function resetView() {
+  currentSector = 'all';
+  currentZoneType = 'all';
+  document.querySelector('input[name="ztype"][value="all"]').checked = true;
+  fitToData();
+  document.getElementById('closeDetailBtn').style.display = 'none';
+  document.getElementById('subscriberDetails').innerHTML = `
+    <div class="empty-state">
+      <div style="font-size:40px; margin-bottom:10px;">📍</div>
+      اضغط على أي محلة في الخريطة<br>للتكبير وعرض العدادات
+    </div>`;
+  processMapData();
+}
+
+function showSubscriberDetails(d, color) {
+  const distAr = nameOfDistrict(d.district);
+  const secAr  = nameOfSector(d.sector) || d.sector;
+  const title  = `حي ${distAr} ← محلة ${secAr} (${d.sector})`;
+  const zCol   = d.zero_consumption === 'نعم' ? 'var(--red)' : 'var(--brand-blue)';
+  const dCol   = d.disc_consumption === 'نعم' ? 'var(--red)' : 'var(--brand-blue)';
+
+  document.getElementById('closeDetailBtn').style.display = 'block';
+  document.getElementById('subscriberDetails').innerHTML = `
+    <div style="font-size:12px; color:var(--brand-blue); font-weight:900; margin-bottom:12px;">${title}</div>
+
+    <div class="detail-card">
+      <div class="d-row"><span class="d-label">العنوان</span><span class="d-val">${d.address || '—'}</span></div>
+      <div class="d-row"><span class="d-label">رقم الحساب</span><span class="d-val">${d.contract_account ?? '—'}</span></div>
+      <div class="d-row"><span class="d-label">اسم المشترك</span><span class="d-val">${d.name || '—'}</span></div>
+      <div class="d-row"><span class="d-label">تصنيف الحساب</span><span class="d-val">${d.account_det || '—'}</span></div>
+      <div class="d-row"><span class="d-label">رقم الجوال</span><span class="d-val" style="color:var(--brand-orange);">${d.phone || '—'}</span></div>
+    </div>
+
+    <div class="detail-card">
+      <div class="d-row"><span class="d-label">حالة العداد</span><span class="status-badge" style="background:${color};">${d.status}</span></div>
+      <div class="d-row" style="margin-top:10px;"><span class="d-label">متوسط الاستهلاك (12 شهر)</span><span class="d-val">${d.average_12m ?? 0}</span></div>
+      <div class="d-row"><span class="d-label">استهلاك صفري</span><span class="d-val" style="color:${zCol}; font-weight:900;">${d.zero_consumption || 'لا'}</span></div>
+      <div class="d-row"><span class="d-label" style="color:var(--red);">مفصول ويوجد استهلاك</span><span class="d-val" style="color:${dCol}; font-weight:900;">${d.disc_consumption || 'لا'}</span></div>
+    </div>
+
+    <div class="detail-card">
+      <div class="d-row"><span class="d-label">توثيق العداد</span><span class="d-val">${d.authenticated || '—'}</span></div>
+    </div>`;
+}
+
+document.getElementById('searchInput').addEventListener('keydown', async e => {
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim();
+  if (!q) return;
+  try {
+    const res = await fetch(`${API}/search/${encodeURIComponent(q)}`);
+    const d   = await res.json();
+    if (d.error)               { alert(d.error); return; }
+    if (d.lat == null || d.lng == null) { alert('المشترك بدون إحداثيات'); return; }
+    currentSector = d.sector;
+    map.flyTo([d.lat, d.lng], 18, { animate:true, duration:1.2 });
+    processMapData();
+    showSubscriberDetails(d, STATUS_COLORS[d.status] || '#718096');
+  } catch (err) {
+    alert('تعذر الاتصال بالسيرفر');
+  }
+});
+
+function exportData() {
+  window.location.href = `${API}/export?sector=${encodeURIComponent(currentSector)}&zone=${encodeURIComponent(currentZoneType)}`;
+}
+
+// Go!
+fetchData();
+</script>
+</body>
+</html>
